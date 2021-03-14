@@ -20,6 +20,7 @@
 
 
 // CONST
+#define SLAVE_ADDR 0xD0
 #define READ_INTERVAL 1s
 #define MAIN_THREAD_DELAY 1s
 #define TRIGGER_THRESHOLD_1 80000
@@ -31,6 +32,7 @@
 #define MAX_BOOK 3
 #define MAX_LDR 3
 #define MAX_LED 3
+#define PRINT_SIZE 16
 
 // Interfaces
 // DigitalOut testled(D13);
@@ -68,7 +70,7 @@ class LightReaders {
                                 // testled = true;
                             }
                         }
-                        printf("No book found at slot %d!, LED: %d, LIGHT: %d\n", ldx, led_array[ldx].read(), (int) read_to_ptr[ldx] * 1000);
+                        // printf("No book found at slot %d!, LED: %d, LIGHT: %d\n", ldx, led_array[ldx].read(), (int) read_to_ptr[ldx] * 1000);
                     }
                 }
                 ThisThread::sleep_for(1s);
@@ -129,23 +131,28 @@ class ESPCommunicator {
             while(true){
                 int i = _slave.receive();
                 switch (i) {
-                    /** NO CASE FOR THIS YET.
-                    case I2CSlave::ReadAddressed: // Master force read.
-                        for(int j = 0; j<sizeof(buff); j++) buff[j] = 0; // **REFACTOR: NO
-                        break;
-                    **/
+                    // /** NO CASE FOR THIS YET.
+                    // case I2CSlave::ReadAddressed: // Master request status.
+                    //     // Write book status
+                    //     for(int ldx=0; ldx < MAX_LDR; ldx++){
+                    //         _slave.write();
+                    //     }
+                        // break;
+                    // **/
                     case I2CSlave::WriteAddressed: // Master update book name.
                         printf("DEBUG: MSG RECV");
                         for(int j = 0; j<sizeof(buff); j++) buff[j] = 0; // **REFACTOR: NO
                         _slave.read(buff, sizeof(buff)-1);
                         printf("DEBUG: RECV { %s }\n", buff);
                         char *end = &buff[BOOK_NAME_INDEX-1];
-                        int book_index = strtol(buff, &end, 10);
+                        int book_index = strtol(&buff[1], &end, 10);
+                        printf("DEBUG: RECV: INDEX %d\n", book_index);
                         if (book_index > MAX_BOOK - 1) {
-                            // printf("INVALID SIGNATURE ACCEPTED. IGNORING READ ...\n");
+                            printf("INVALID SIGNATURE ACCEPTED. IGNORING READ ...\n");
                             continue;
                         }
                         strcpy((char *) book_array_ptr[book_index].book_name, &buff[BOOK_NAME_INDEX]);
+                        // printf("DEBUG: NEW NAME: %s\n", book_array_ptr[book_index].book_name);
                         break;
                 }
             }
@@ -183,7 +190,7 @@ SSD1306 oled(I2C_SDA, I2C_SCL);
 
 // ASX
 volatile Book shelf[MAX_BOOK];
-ESPCommunicator comm(I2C_ESP_SDA, I2C_ESP_SCL, 0xA0, shelf);
+ESPCommunicator comm(I2C_ESP_SDA, I2C_ESP_SCL, SLAVE_ADDR, shelf);
 
 // Helper Thread
 EventQueue mqueue;
@@ -196,6 +203,31 @@ void report_shelf_status(volatile Book* bPtr){
         printf("SLOT: %d, BOOK_NAME: %s, STATUS: %d\n", book_index, bPtr[book_index].book_name, *(bPtr[book_index].book_status));
     }
     return;
+}
+
+void oled_shelf_status(volatile Book* bPtr){
+    oled.cls();
+    char to_print[PRINT_SIZE+1];
+    const char *tail = "...\0";
+    for(int book_index_inc = 0; book_index_inc < MAX_BOOK; book_index_inc++){
+        oled.locate(book_index_inc*3, 0);
+        strncpy(to_print, (const char *) bPtr[book_index_inc].book_name, PRINT_SIZE-4);
+        // strncpy(to_print, "TESTBOOK_TESTBOOK", PRINT_SIZE-4);
+        strncpy(&(to_print[PRINT_SIZE-4]), tail, 4);
+        oled.printf("%s", to_print);
+
+        oled.locate((book_index_inc * 3) + 1, 0);
+        if (*(bPtr[book_index_inc - 1].book_status)){
+            const char *status = "AVAILABLE\0";
+            strncpy(to_print, status, PRINT_SIZE);
+        }
+        else {
+            const char *status = "NOT AVAILABLE\0";
+            strncpy(to_print, status, PRINT_SIZE);
+        }
+        oled.printf("%s", to_print);
+    }
+    oled.redraw();
 }
 
 
@@ -218,12 +250,14 @@ int main() {
 
     for(int sdx = 0; sdx<MAX_LDR; sdx++){
         shelf[sdx].book_status = &ldr_reader.trigger_levels[sdx];
+        const char *NA = "N/A\0";
+        strcpy((char *) shelf[sdx].book_name, NA);
     }
     report_shelf_status(shelf);
     oled.locate(3, 1);
     oled.printf ("COMPLETE ..."); // print to frame buffer
     oled.redraw();
-    printf("System Check Complete ...\n");
+    printf("System Check Complete ... STARING IN 3s\n");
     wait_us(3000000);
     oled.cls();
     oled.locate(8,0);
@@ -242,12 +276,16 @@ int main() {
     printf("Communication Thread Spinned off\n");
 
     // Report to UART
-    mqueue.call_every(3s, printf, "HELLO !\n");
+    mqueue.call_every(3s, oled_shelf_status, shelf);
     mqueue.dispatch_forever();
 
     // // Main Loop
     while(true){
         // User Code Begin Here
+        // oled_shelf_status(&oled, shelf);
+        // report_shelf_status(shelf);
+        
         // Main Thread hold out
+        // ThisThread::sleep_for(1s);
     }
 }
