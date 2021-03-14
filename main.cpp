@@ -54,8 +54,9 @@ class LightReaders {
             while(true){
                 for(int ldx=0; ldx<MAX_LED; ldx++){
                     read_to_ptr[ldx] = ldr_array[ldx];
-                    printf("READ FROM LDR %d: %ld\n", ldx,  (long int) (100000 * read_to_ptr[ldx]));
-                    if (read_to_ptr[ldx] > trigger_thresholds[ldx]) {
+                    long int casted = (long int) (100000 * read_to_ptr[ldx]);
+                    printf("READ FROM LDR %d: %ld\n", ldx,  casted);
+                    if (casted > trigger_thresholds[ldx]) {
                         trigger_levels[ldx] = false;
                         if(led_array[ldx].is_connected()){
                             led_array[ldx] = false;
@@ -89,6 +90,7 @@ class LightReaders {
             trigger_thresholds = _trigger_thresholds;
             for(int tdx; tdx < MAX_LED; tdx++){
                 led_array[tdx] = 0;
+                trigger_levels[tdx] = false;
             }
         }
         void start(){
@@ -221,7 +223,7 @@ void oled_shelf_status(volatile Book* bPtr){
         oled.printf("%s", to_print);
 
         oled.locate((book_index_inc * 3) + 1, 0);
-        if (*(bPtr[book_index_inc - 1].book_status)){
+        if (*(bPtr[book_index_inc].book_status)){
             const char *status = "AVAILABLE\0";
             strncpy(to_print, status, PRINT_SIZE);
         }
@@ -253,7 +255,7 @@ int main() {
     oled.redraw();
 
     for(int sdx = 0; sdx<MAX_LDR; sdx++){
-        shelf[sdx].book_status = &ldr_reader.trigger_levels[sdx];
+        shelf[sdx].book_status = &(ldr_reader.trigger_levels[sdx]);
         const char *NA = "N/A\0";
         strcpy((char *) shelf[sdx].book_name, NA);
     }
@@ -281,6 +283,7 @@ int main() {
 
     // Report to UART
     mqueue.call_every(3s, oled_shelf_status, shelf);
+    // mqueue.call_every(3s, report_shelf_status, shelf);
     mqueue.dispatch_forever();
 
     // // Main Loop
