@@ -7,7 +7,7 @@
 
 // PIN MAP
 #define LDR_1 A0
-#define LDR_2 A1
+#define LDR_2 A2
 #define LDR_3 A3
 #define B_LED D13
 #define LED_1 D3
@@ -54,21 +54,25 @@ class LightReaders {
             while(true){
                 for(int ldx=0; ldx<MAX_LED; ldx++){
                     read_to_ptr[ldx] = ldr_array[ldx];
+                    printf("READ FROM LDR %d: %ld\n", ldx,  (long int) (100000 * read_to_ptr[ldx]));
                     if (read_to_ptr[ldx] > trigger_thresholds[ldx]) {
-                        trigger_levels[ldx] = true;
+                        trigger_levels[ldx] = false;
                         if(led_array[ldx].is_connected()){
-                            led_array[ldx] = true;
+                            led_array[ldx] = false;
                         }
                     }
                     else {
-                        trigger_levels[ldx] = false;
+                        trigger_levels[ldx] = true;
                         if(led_array[ldx].is_connected()){
+                            /** DEBUG CODE
                             if (ldx == -1)
-                                led_array[ldx] = false;
+                                led_array[ldx] = true;
                             else {
                                 led_array[ldx] = !led_array[ldx];
                                 // testled = true;
                             }
+                            **/
+                            led_array[ldx] = true;
                         }
                         // printf("No book found at slot %d!, LED: %d, LIGHT: %d\n", ldx, led_array[ldx].read(), (int) read_to_ptr[ldx] * 1000);
                     }
@@ -140,13 +144,13 @@ class ESPCommunicator {
                         // break;
                     // **/
                     case I2CSlave::WriteAddressed: // Master update book name.
-                        printf("DEBUG: MSG RECV");
+                        // printf("DEBUG: MSG RECV");
                         for(int j = 0; j<sizeof(buff); j++) buff[j] = 0; // **REFACTOR: NO
                         _slave.read(buff, sizeof(buff)-1);
-                        printf("DEBUG: RECV { %s }\n", buff);
+                        // printf("DEBUG: RECV { %s }\n", buff);
                         char *end = &buff[BOOK_NAME_INDEX-1];
                         int book_index = strtol(&buff[1], &end, 10);
-                        printf("DEBUG: RECV: INDEX %d\n", book_index);
+                        // printf("DEBUG: RECV: INDEX %d\n", book_index);
                         if (book_index > MAX_BOOK - 1) {
                             printf("INVALID SIGNATURE ACCEPTED. IGNORING READ ...\n");
                             continue;
