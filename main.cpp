@@ -1,6 +1,7 @@
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
+#include <string.h>
 #include <mbed.h>
 #include "ssd1306.h"
 // #include <string>
@@ -55,7 +56,8 @@ class LightReaders {
                 for(int ldx=0; ldx<MAX_LED; ldx++){
                     read_to_ptr[ldx] = ldr_array[ldx];
                     long int casted = (long int) (100000 * read_to_ptr[ldx]);
-                    printf("READ FROM LDR %d: %ld\n", ldx,  casted);
+                    // printf("FROM BOARD SIGNATURE: %d\n", SLAVE_ADDR);
+                    // printf("READ FROM LDR %d: %ld\n", ldx,  casted);
                     if (casted > trigger_thresholds[ldx]) {
                         trigger_levels[ldx] = false;
                         if(led_array[ldx].is_connected()){
@@ -145,19 +147,37 @@ class ESPCommunicator {
                     //     }
                         // break;
                     // **/
+                    // msg: {b addr} {col} {book name}
                     case I2CSlave::WriteAddressed: // Master update book name.
-                        // printf("DEBUG: MSG RECV");
+                        // printf("DEBUG: MSG RECV\n");
+                        bool flag = false;
+                        int book_index = -1;
+                        int addr = -1;
                         for(int j = 0; j<sizeof(buff); j++) buff[j] = 0; // **REFACTOR: NO
                         _slave.read(buff, sizeof(buff)-1);
                         // printf("DEBUG: RECV { %s }\n", buff);
-                        char *end = &buff[BOOK_NAME_INDEX-1];
-                        int book_index = strtol(&buff[1], &end, 10);
+                        // char *end = &buff[BOOK_NAME_INDEX-1];
+                        // int book_index = strtol(&buff[1], &end, 10);
                         // printf("DEBUG: RECV: INDEX %d\n", book_index);
-                        if (book_index > MAX_BOOK - 1) {
-                            printf("INVALID SIGNATURE ACCEPTED. IGNORING READ ...\n");
+                        char *token = strtok(buff, "|");
+                        for(int i = 0; i < 3; i++){
+                            if (token == NULL) {flag = true; break;}
+                            if (i == 0) {int addr = atoi(token); if(addr != SLAVE_ADDR) {flag = true; break;} }
+                            if (i == 1) book_index = atoi(token);
+                            else {strcpy(buff, token);}
+                            token = strtok(NULL, "|");
+                        }
+                        // printf("DEBUG: RECV: INDEX %d NAME: %s\n", book_index, buff);
+                        if (book_index > MAX_BOOK || book_index < 1 || flag) {
+                            // printf("INVALID SIGNATURE ACCEPTED. IGNORING READ ...\n");
+                            // printf("ADDR: %d COL: %d Data: %s", addr, book_index, buff);
+                            flag = false;
                             continue;
                         }
-                        strcpy((char *) book_array_ptr[book_index].book_name, &buff[BOOK_NAME_INDEX]);
+                        else printf("Updating...\n");
+                        // Reduction to c index
+                        book_index -= 1;
+                        strcpy((char *) book_array_ptr[book_index].book_name, buff);
                         // printf("DEBUG: NEW NAME: %s\n", book_array_ptr[book_index].book_name);
                         break;
                 }
